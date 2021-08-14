@@ -23,7 +23,6 @@ import {headingDistanceTo, createLocation} from 'geolocation-utils';
 import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
 import {BuzzerConstants, Buzzer} from "./Buzzer"
-import {createConsole} from './inlineConsole';
 
 Amplify.configure(awsmobile);
 
@@ -38,11 +37,13 @@ const {
 } = BuzzerConstants;
 
 function App() {
+    const [direction, setDirection] = React.useState(0);
+    const [distance, setDistance] = React.useState(0);
+    const [accuracy, setAccuracy] = React.useState(0);
     const [currentCoordinates, setCurrentCoordinates] = React.useState(null);
     const [targetCoordinates, setTargetCoordinates] = React.useState(null);
     const [coordinatesValid, setCoordinatesValid] = React.useState(true);
     const [explorationInProgress, setExplorationInProgress] = React.useState(false);
-    const [heading, setHeading] = React.useState(null);
     const classes = useStyles();
     const [buzzer] = React.useState(new Buzzer({volumeHi: 0.02, volumeFrequency: 1, balance: 0.0}));
     const [volume, setVolume] = React.useState(buzzer.sound.volume);
@@ -53,101 +54,60 @@ function App() {
         initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
         }});
 
-    // useEffect(evalDistanceAndDirection, [targetCoordinates]);
-    // useEffect(handleCurrentPositionChanged, [currentCoordinates]);
+    useEffect(() => {
+        if (currentCoordinates && targetCoordinates) {
+            const from = createLocation(Number(currentCoordinates?.lat),
+                Number(currentCoordinates?.lng), 'LatLng');
 
-    // useEffect(() => {
-    //     const inlineConsole = createConsole();
-    //     document.body.appendChild(inlineConsole);
-    //     ref.current.inlineConsoleVisible = inlineConsoleVisible;
-    //     ref.current.inlinedConsole = inlineConsole;
-    //     const appName = document.querySelector("#sonarNavigatorAppName");
-    //     appName ? appName.addEventListener('dblclick', (event) => {
-    //         showHideConsole();
-    //         }) :
-    //         console.warn('Inline console cannot be attached.');
-    //
-    //     return function cleanup() {appName.removeEventListener('dblclick', (event) => showHideConsole())}
-    // });
+            console.debug('From: ' + JSON.stringify(from));
 
-    function showHideConsole() {
-        const prevConsoleState = ref.current;
-        if (prevConsoleState.inlineConsoleVisible) {
-            prevConsoleState.inlinedConsole.setAttribute('hidden', 'true');
-        } else {
-            prevConsoleState.inlinedConsole.removeAttribute('hidden');
+            const [targetLat, targetLng] = targetCoordinates.split(',');
+            const to = createLocation(parseFloat(targetLat),
+                parseFloat(targetLng), 'LatLng');
+
+            console.debug('To: ' + JSON.stringify(to));
+
+            let headingAndDistance = headingDistanceTo(from, to)
+            if (headingAndDistance) {
+                setDirection(Math.round(headingAndDistance.heading));
+                setDistance(Number(headingAndDistance.distance.toPrecision(1)));
+                setAccuracy(currentCoordinates.accuracy);
+            }
         }
+    }, [targetCoordinates, currentCoordinates]);
 
-        ref.current.inlinedConsole = prevConsoleState.inlinedConsole;
-        ref.current.inlineConsoleVisible = !prevConsoleState.inlineConsoleVisible;
-
-        setInlineConsoleVisible(ref.current.inlineConsoleVisible);
-    }
-
-    function handleCurrentPositionChanged() {
-        //update heading state to get correct direction & distance
-        evalDistanceAndDirection();
-        const direction = getDirection();
-        const newBalance = direction / 180;
-        console.debug(`${direction} / 180 = ${newBalance}`);
-        setBalance(newBalance);
-        buzzer.setBalance(newBalance);
-        const distance = getDistance();
-        if (distance) {
-            let frequency = (MAX_FREQUENCY - ref.current.userSoundSettings.initFrequency) / distance;
-            console.debug('New frequency: ' + frequency);
-            setFrequency(frequency);
-            buzzer.frequency(frequency);
-            console.debug(`Set frequency=${frequency} for distance=${distance}`);
+    useEffect(() => {
+        if (explorationInProgress) {
+            const newBalance = direction / 180;
+            console.debug(`${direction} / 180 = ${newBalance}`);
+            setBalance(newBalance);
+            buzzer.setBalance(newBalance);
+            if (distance) {
+                let frequency = MAX_FREQUENCY / distance + ref.current.userSoundSettings.initFrequency;
+                console.debug('New frequency: ' + frequency);
+                setFrequency(frequency);
+                buzzer.frequency(frequency);
+                console.debug(`Set frequency=${frequency} for distance=${distance}`);
+            }
         }
+    }, [direction, distance, buzzer, explorationInProgress]);
 
-        return function cleanUp() {};
-    }
-
-    /**
-     * Current method is called each time either current or target position is changed.
-     *
-     * @returns {function()}
-     */
-    function evalDistanceAndDirection() {
-        //hook is called first time for undefined currentCoordinates
-        if (!currentCoordinates || !targetCoordinates) {
-            return;
-        }
-        const from = createLocation(Number(currentCoordinates?.lat),
-            Number(currentCoordinates?.lng), 'LatLng');
-
-        console.debug('From: ' + JSON.stringify(from));
-        const [targetLat, targetLng] = targetCoordinates.split(',');
-        const to = createLocation(parseFloat(targetLat),
-            parseFloat(targetLng), 'LatLng');
-
-        console.debug('To: ' + JSON.stringify(to));
-
-        let headingAndDistance = headingDistanceTo(from, to)
-        if (headingAndDistance) {
-            headingAndDistance[Symbol.for('accuracy')] = currentCoordinates.accuracy.toFixed(1);
-            setHeading(headingAndDistance);
-        }
-
-        return function cleanUp() {};
-    }
 
     const handleStartStop = (event) => {
         let validCoords = coordsValid(targetCoordinates);
         setCoordinatesValid(validCoords);
         console.debug(`Coordinates [${targetCoordinates}] valid: ${validCoords}`);
         if (validCoords) {
+            const userInitFrequency = ref.current.userSoundSettings.initFrequency;
+            setFrequency(userInitFrequency);
+            buzzer.frequency(userInitFrequency);
+            const userInitBalance = ref.current.userSoundSettings.initBalance;
+            setBalance(userInitBalance);
+            buzzer.setBalance(userInitBalance);
+
             if (explorationInProgress) {
                 buzzer.stop();
             } else {
-                const startDistance = getDistance();
-                const userInitFrequency = ref.current.userSoundSettings.initFrequency;
-                setFrequency(userInitFrequency);
-                buzzer.frequency(userInitFrequency);
-                const userInitBalance = ref.current.userSoundSettings.initBalance;
-                setBalance(userInitBalance);
-                buzzer.setBalance(userInitBalance);
                 buzzer.play();
             }
             setExplorationInProgress(!explorationInProgress);
@@ -204,28 +164,6 @@ function App() {
         buzzer.setBalance(newValue);
     }
 
-    /**
-     * Get direction from heading.
-     *
-     * @returns {number|number}
-     */
-    function getDirection() {
-        let direction = (heading && heading.heading) ? Math.round(heading.heading) : 0;
-
-        return direction;
-    }
-
-    /**
-     * Get distance from calculated heading.
-     *
-     * @returns {number|number}
-     */
-    function getDistance() {
-        let distance = (heading && heading.distance) ? Number(heading.distance.toFixed(1)) : 0;
-
-        return distance;
-    }
-
     return (
         <React.Fragment>
             <CssBaseline/>
@@ -267,7 +205,7 @@ function App() {
                                     id="target-direction"
                                     label="Target direction"
                                     helperText="Degrees"
-                                    value={getDirection()}
+                                    value={direction}
                                 />
                             </FormControl>
                             <FormControl disabled>
@@ -275,7 +213,7 @@ function App() {
                                     id="target-distance"
                                     label="Target distance"
                                     helperText="Meters"
-                                    value={`${getDistance()} +/- ${Math.round(heading?.[Symbol.for('accuracy')])}`}
+                                    value={`${distance} +/- ${accuracy}`}
                                 />
                             </FormControl>
                         </div>
