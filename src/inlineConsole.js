@@ -1,5 +1,5 @@
 export function createConsole(){
-    var inlineConsole, consoleWrapper, initInlineConsole, sendMsg, toggleVisible, clearConsole, isDescendant,
+    var inlineConsole, initInlineConsole, sendMsg, toggleVisible, clearConsole, isDescendant,
         consoleHeight = 240,
         //watchEvents = ['click','focus','unfocus','blur','unblur','touchstart','touchend'],
         watchEvents = [],
@@ -18,7 +18,7 @@ export function createConsole(){
     isDescendant = function(parent, child) {
         var node = child.parentNode;
         while (node != null) {
-            if (node == parent) {
+            if (node === parent) {
                 return true;
             }
             node = node.parentNode;

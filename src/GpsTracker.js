@@ -32,7 +32,7 @@ export default class GpsTracker extends React.Component {
     }
 
     positionChanged(pos) {
-        console.debug('Position changed: ' + new Date().toTimeString() + ': ' + JSON.stringify(pos));
+        console.debug('Position changed: ' + new Date().toLocaleTimeString() + ': ' + JSON.stringify(pos));
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         const accuracy = pos.coords.accuracy;
@@ -46,6 +46,6 @@ export default class GpsTracker extends React.Component {
 
     render() {
 
-        return (<></>);
+        return null;
     };
 }

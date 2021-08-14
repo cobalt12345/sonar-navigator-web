@@ -3,7 +3,7 @@ import Amplify from 'aws-amplify';
 import Styles from './styles';
 import {makeStyles} from '@material-ui/core/styles';
 import React, {useEffect, useRef} from 'react';
-import {CssBaseline, LinearProgress, TextField} from '@material-ui/core';
+import {VolumeDown, VolumeUp, ExpandMore, ExpandLess, ArrowLeft, ArrowRight} from '@material-ui/icons';
 import {
     Toolbar,
     Typography,
@@ -11,13 +11,19 @@ import {
     Paper,
     AppBar,
     FormControl,
-    FormHelperText
+    FormHelperText,
+    CssBaseline,
+    LinearProgress,
+    TextField,
+    Slider,
+    Grid
 } from '@material-ui/core';
 
 import {headingDistanceTo, createLocation} from 'geolocation-utils';
 import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
-import Buzzer from "./Buzzer";
+import {BuzzerConstants, Buzzer} from "./Buzzer"
+import {createConsole} from './inlineConsole';
 
 Amplify.configure(awsmobile);
 
@@ -25,20 +31,87 @@ const useStyles = makeStyles(theme => {
     return new Styles(theme);
 });
 
+const {
+    Frequency: {MIN_FREQUENCY, MAX_FREQUENCY, FREQUENCY_STEP},
+    Volume: {MIN_VOLUME, MAX_VOLUME, VOLUME_STEP},
+    Balance: {MIN_BALANCE, MAX_BALANCE, NORM_BALANCE, BALANCE_STEP}
+} = BuzzerConstants;
+
 function App() {
     const [currentCoordinates, setCurrentCoordinates] = React.useState(null);
-    const [targetCoordinates, setTargetCoordinates] = React.useState('');
+    const [targetCoordinates, setTargetCoordinates] = React.useState(null);
     const [coordinatesValid, setCoordinatesValid] = React.useState(true);
     const [explorationInProgress, setExplorationInProgress] = React.useState(false);
     const [heading, setHeading] = React.useState(null);
     const classes = useStyles();
-    const [buzzer] = React.useState(new Buzzer());
+    const [buzzer] = React.useState(new Buzzer({volumeHi: 0.02, volumeFrequency: 1, balance: 0.0}));
+    const [volume, setVolume] = React.useState(buzzer.sound.volume);
+    const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
+    const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
+    const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
+    const ref = useRef({inlinedConsole: undefined, inlineConsoleVisible: false, userSoundSettings: {
+        initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
+        }});
 
-    useEffect(evalDistanceAndDirection, [currentCoordinates, targetCoordinates]);
+    // useEffect(evalDistanceAndDirection, [targetCoordinates]);
+    // useEffect(handleCurrentPositionChanged, [currentCoordinates]);
 
+    // useEffect(() => {
+    //     const inlineConsole = createConsole();
+    //     document.body.appendChild(inlineConsole);
+    //     ref.current.inlineConsoleVisible = inlineConsoleVisible;
+    //     ref.current.inlinedConsole = inlineConsole;
+    //     const appName = document.querySelector("#sonarNavigatorAppName");
+    //     appName ? appName.addEventListener('dblclick', (event) => {
+    //         showHideConsole();
+    //         }) :
+    //         console.warn('Inline console cannot be attached.');
+    //
+    //     return function cleanup() {appName.removeEventListener('dblclick', (event) => showHideConsole())}
+    // });
+
+    function showHideConsole() {
+        const prevConsoleState = ref.current;
+        if (prevConsoleState.inlineConsoleVisible) {
+            prevConsoleState.inlinedConsole.setAttribute('hidden', 'true');
+        } else {
+            prevConsoleState.inlinedConsole.removeAttribute('hidden');
+        }
+
+        ref.current.inlinedConsole = prevConsoleState.inlinedConsole;
+        ref.current.inlineConsoleVisible = !prevConsoleState.inlineConsoleVisible;
+
+        setInlineConsoleVisible(ref.current.inlineConsoleVisible);
+    }
+
+    function handleCurrentPositionChanged() {
+        //update heading state to get correct direction & distance
+        evalDistanceAndDirection();
+        const direction = getDirection();
+        const newBalance = direction / 180;
+        console.debug(`${direction} / 180 = ${newBalance}`);
+        setBalance(newBalance);
+        buzzer.setBalance(newBalance);
+        const distance = getDistance();
+        if (distance) {
+            let frequency = (MAX_FREQUENCY - ref.current.userSoundSettings.initFrequency) / distance;
+            console.debug('New frequency: ' + frequency);
+            setFrequency(frequency);
+            buzzer.frequency(frequency);
+            console.debug(`Set frequency=${frequency} for distance=${distance}`);
+        }
+
+        return function cleanUp() {};
+    }
+
+    /**
+     * Current method is called each time either current or target position is changed.
+     *
+     * @returns {function()}
+     */
     function evalDistanceAndDirection() {
         //hook is called first time for undefined currentCoordinates
-        if (!currentCoordinates) {
+        if (!currentCoordinates || !targetCoordinates) {
             return;
         }
         const from = createLocation(Number(currentCoordinates?.lat),
@@ -53,7 +126,7 @@ function App() {
 
         let headingAndDistance = headingDistanceTo(from, to)
         if (headingAndDistance) {
-            headingAndDistance[Symbol.for('accuracy')] = currentCoordinates.accuracy;
+            headingAndDistance[Symbol.for('accuracy')] = currentCoordinates.accuracy.toFixed(1);
             setHeading(headingAndDistance);
         }
 
@@ -68,6 +141,13 @@ function App() {
             if (explorationInProgress) {
                 buzzer.stop();
             } else {
+                const startDistance = getDistance();
+                const userInitFrequency = ref.current.userSoundSettings.initFrequency;
+                setFrequency(userInitFrequency);
+                buzzer.frequency(userInitFrequency);
+                const userInitBalance = ref.current.userSoundSettings.initBalance;
+                setBalance(userInitBalance);
+                buzzer.setBalance(userInitBalance);
                 buzzer.play();
             }
             setExplorationInProgress(!explorationInProgress);
@@ -89,12 +169,69 @@ function App() {
         }
     };
 
+    /**
+     * Slider action.
+     *
+     * @param event
+     * @param newValue
+     */
+    const handleVolumeChange = (event, newValue) => {
+        setVolume(newValue);
+        buzzer.volume(newValue);
+    }
+
+    /**
+     * Slider action.
+     *
+     * @param event
+     * @param newValue
+     */
+    const handleFrequencyChange = (event, newValue) => {
+        buzzer.play();
+        setFrequency(newValue);
+        buzzer.frequency(newValue);
+    }
+
+    /**
+     * Slider action.
+     *
+     * @param event
+     * @param newValue
+     */
+    const handleBalanceChange = (event, newValue) => {
+        buzzer.play();
+        setBalance(newValue);
+        buzzer.setBalance(newValue);
+    }
+
+    /**
+     * Get direction from heading.
+     *
+     * @returns {number|number}
+     */
+    function getDirection() {
+        let direction = (heading && heading.heading) ? Math.round(heading.heading) : 0;
+
+        return direction;
+    }
+
+    /**
+     * Get distance from calculated heading.
+     *
+     * @returns {number|number}
+     */
+    function getDistance() {
+        let distance = (heading && heading.distance) ? Number(heading.distance.toFixed(1)) : 0;
+
+        return distance;
+    }
+
     return (
         <React.Fragment>
             <CssBaseline/>
             <AppBar position="absolute" color="default" className={classes.appBar}>
                 <Toolbar>
-                    <Typography variant="h6" color="inherit" noWrap>
+                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap onClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
                         Sonar Navigator
                     </Typography>
                 </Toolbar>
@@ -107,8 +244,9 @@ function App() {
                     </Typography>
                     <React.Fragment>
                         <div>
-                            <FormControl disabled={explorationInProgress}>
+                            <FormControl>
                                 <TextField
+                                    disabled={explorationInProgress}
                                     onChange={(event) => {
                                         setTargetCoordinates(event.target.value);
                                     }
@@ -129,7 +267,7 @@ function App() {
                                     id="target-direction"
                                     label="Target direction"
                                     helperText="Degrees"
-                                    value={Math.round(heading?.heading)}
+                                    value={getDirection()}
                                 />
                             </FormControl>
                             <FormControl disabled>
@@ -137,12 +275,72 @@ function App() {
                                     id="target-distance"
                                     label="Target distance"
                                     helperText="Meters"
-                                    value={`${heading?.distance?.toFixed(1)} +/- ${heading?.[Symbol.for('accuracy')]}`}
+                                    value={`${getDistance()} +/- ${Math.round(heading?.[Symbol.for('accuracy')])}`}
                                 />
                             </FormControl>
                         </div>
                         <div>
                             <GpsTracker updateCoordinates={setCurrentCoordinates} />
+                        </div>
+                        <div>
+                            <Typography gutterBottom>
+                                Volume
+                            </Typography>
+                            <Grid container spacing={2}>
+                                <Grid item>
+                                    <VolumeDown />
+                                </Grid>
+                                <Grid item xs>
+                                    <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP} value={volume}
+                                            onChange={handleVolumeChange} aria-labelledby="continuous-slider" />
+                                </Grid>
+                                <Grid item>
+                                    <VolumeUp />
+                                </Grid>
+                            </Grid>
+                        </div>
+                        <div>
+                            <Typography gutterBottom>
+                                Frequency
+                            </Typography>
+                            <Grid container spacing={2}>
+                                <Grid item>
+                                    <ExpandMore />
+                                </Grid>
+                                <Grid item xs>
+                                    <Slider min={MIN_FREQUENCY} max={MAX_FREQUENCY - 1} step={FREQUENCY_STEP} value={frequency}
+                                            disabled={explorationInProgress}
+                                            onChange={handleFrequencyChange}
+                                            onChangeCommitted={() => {
+                                                buzzer.pause();
+                                                ref.current.userSoundSettings.initFrequency = frequency;
+                                            }} aria-labelledby="continuous-slider" />
+                                </Grid>
+                                <Grid item>
+                                    <ExpandLess />
+                                </Grid>
+                            </Grid>
+                        </div>
+                        <div>
+                            <Typography gutterBottom>
+                                Balance
+                            </Typography>
+                            <Grid container spacing={2}>
+                                <Grid item>
+                                    <ArrowLeft />
+                                </Grid>
+                                <Grid item xs>
+                                    <Slider min={MIN_BALANCE} max={MAX_BALANCE} step={BALANCE_STEP} value={balance}
+                                            onChange={handleBalanceChange} aria-labelledby="continuous-slider"
+                                            onChangeCommitted={() => {
+                                                buzzer.pause();
+                                                ref.current.userSoundSettings.initBalance = balance;}}
+                                            disabled={explorationInProgress} />
+                                </Grid>
+                                <Grid item>
+                                    <ArrowRight />
+                                </Grid>
+                            </Grid>
                         </div>
                         <div className={classes.buttons}>
                             <Button onClick={handleStartStop} variant='contained' className={classes.button}>
