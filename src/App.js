@@ -1,3 +1,4 @@
+import LogsContainer from './LogsContainer';
 import './App.css';
 import Amplify from 'aws-amplify';
 import Styles from './styles';
@@ -22,7 +23,8 @@ import {
 import {headingDistanceTo, createLocation} from 'geolocation-utils';
 import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
-import {BuzzerConstants, Buzzer} from "./Buzzer"
+import {BuzzerConstants, Buzzer} from "./Buzzer";
+
 
 Amplify.configure(awsmobile);
 
@@ -37,7 +39,9 @@ const {
 } = BuzzerConstants;
 
 function App() {
-    const [direction, setDirection] = React.useState(0);
+    const [requiredDirection, setRequiredDirection] = React.useState(0);
+    const [actualMovingDirection, setActualMovingDirection] = React.useState(0);
+    const [actualMovingSpeed, setActualMovingSpeed] = React.useState(0);
     const [distance, setDistance] = React.useState(0);
     const [accuracy, setAccuracy] = React.useState(0);
     const [currentCoordinates, setCurrentCoordinates] = React.useState(null);
@@ -50,7 +54,7 @@ function App() {
     const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
     const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
-    const ref = useRef({inlinedConsole: undefined, inlineConsoleVisible: false, userSoundSettings: {
+    const ref = useRef({userSoundSettings: {
         initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
         }});
 
@@ -67,10 +71,19 @@ function App() {
 
             console.debug('To: ' + JSON.stringify(to));
 
-            let headingAndDistance = headingDistanceTo(from, to)
+            let headingAndDistance = headingDistanceTo(from, to);
+            const deviceHeading = currentCoordinates?.deviceHeading;
+            if (deviceHeading) {
+                setActualMovingDirection(deviceHeading);
+            }
+            const deviceSpeed = currentCoordinates?.deviceSpeed;
+            if (deviceSpeed) {
+                setActualMovingSpeed(deviceSpeed);
+            }
             if (headingAndDistance) {
-                setDirection(Math.round(headingAndDistance.heading));
+                setRequiredDirection(Math.round(headingAndDistance.heading));
                 setDistance(Number(headingAndDistance.distance.toPrecision(1)));
+                console.debug('Heading distance: ' + headingAndDistance.distance);
                 setAccuracy(currentCoordinates.accuracy);
             }
         }
@@ -78,8 +91,9 @@ function App() {
 
     useEffect(() => {
         if (explorationInProgress) {
-            const newBalance = direction / 180;
-            console.debug(`${direction} / 180 = ${newBalance}`);
+            const newBalance = (requiredDirection - actualMovingDirection) / 180;
+
+            console.debug(`(${requiredDirection} - ${actualMovingDirection}) / 180 = ${newBalance}`);
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
             if (distance) {
@@ -90,7 +104,7 @@ function App() {
                 console.debug(`Set frequency=${frequency} for distance=${distance}`);
             }
         }
-    }, [direction, distance, buzzer, explorationInProgress]);
+    }, [requiredDirection, actualMovingDirection, distance, buzzer, explorationInProgress]);
 
 
     const handleStartStop = (event) => {
@@ -169,7 +183,7 @@ function App() {
             <CssBaseline/>
             <AppBar position="absolute" color="default" className={classes.appBar}>
                 <Toolbar>
-                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap onClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
+                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap onDoubleClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
                         Sonar Navigator
                     </Typography>
                 </Toolbar>
@@ -205,7 +219,7 @@ function App() {
                                     id="target-direction"
                                     label="Target direction"
                                     helperText="Degrees"
-                                    value={direction}
+                                    value={requiredDirection}
                                 />
                             </FormControl>
                             <FormControl disabled>
@@ -214,6 +228,24 @@ function App() {
                                     label="Target distance"
                                     helperText="Meters"
                                     value={`${distance} +/- ${accuracy}`}
+                                />
+                            </FormControl>
+                        </div>
+                        <div>
+                            <FormControl disabled>
+                                <TextField
+                                    id="movement-direction"
+                                    label="Movement direction"
+                                    helperText="Degrees"
+                                    value={actualMovingDirection}
+                                />
+                            </FormControl>
+                            <FormControl disabled>
+                                <TextField
+                                    id="movement-speed"
+                                    label="Movement speed"
+                                    helperText="m/s"
+                                    value={actualMovingSpeed}
                                 />
                             </FormControl>
                         </div>
@@ -288,6 +320,10 @@ function App() {
                     </React.Fragment>
                 </Paper>
             </main>
+            {
+                inlineConsoleVisible &&
+                <LogsContainer classes={classes}/>
+            }
         </React.Fragment>
     );
 }

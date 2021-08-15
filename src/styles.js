@@ -31,6 +31,11 @@ function Styles(theme) {
             marginTop: theme.spacing(3),
             marginLeft: theme.spacing(1),
         },
+        cons: {
+            backgroundColor: '#242424',
+            height: 200,
+            overflowY: 'scroll'
+        }
     });
 }
 
