@@ -1,10 +1,5 @@
 import React from 'react'
 import { Hook, Console, Decode } from 'console-feed'
-import {makeStyles, withStyles} from "@material-ui/core/styles";
-import Styles from "./styles";
-const useStyles = makeStyles(theme => {
-    return new Styles(theme);
-});
 
 class LogsContainer extends React.Component {
 
@@ -31,4 +26,4 @@ class LogsContainer extends React.Component {
     }
 }
 
-export default withStyles(useStyles)(LogsContainer);
+export default LogsContainer;
