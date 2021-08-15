@@ -20,7 +20,7 @@ import {
     Grid
 } from '@material-ui/core';
 
-import {headingDistanceTo, createLocation} from 'geolocation-utils';
+import {headingDistanceTo, createLocation, normalizeHeading} from 'geolocation-utils';
 import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
 import {BuzzerConstants, Buzzer} from "./Buzzer";
@@ -74,14 +74,14 @@ function App() {
             let headingAndDistance = headingDistanceTo(from, to);
             const deviceHeading = currentCoordinates?.deviceHeading;
             if (deviceHeading) {
-                setActualMovingDirection(deviceHeading);
+                setActualMovingDirection(Math.round(deviceHeading));
             }
             const deviceSpeed = currentCoordinates?.deviceSpeed;
             if (deviceSpeed) {
-                setActualMovingSpeed(deviceSpeed);
+                setActualMovingSpeed(deviceSpeed.toPrecision(1));
             }
             if (headingAndDistance) {
-                setRequiredDirection(Math.round(headingAndDistance.heading));
+                setRequiredDirection(Math.round(normalizeHeading(headingAndDistance.heading)));
                 setDistance(Number(headingAndDistance.distance.toPrecision(1)));
                 console.debug('Heading distance: ' + headingAndDistance.distance);
                 setAccuracy(currentCoordinates.accuracy);
@@ -91,9 +91,9 @@ function App() {
 
     useEffect(() => {
         if (explorationInProgress) {
-            const newBalance = (requiredDirection - actualMovingDirection) / 180;
+            const newBalance = (requiredDirection - actualMovingDirection) / 360;
 
-            console.debug(`(${requiredDirection} - ${actualMovingDirection}) / 180 = ${newBalance}`);
+            console.debug(`(${requiredDirection} - ${actualMovingDirection}) / 360 = ${newBalance}`);
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
             if (distance) {
