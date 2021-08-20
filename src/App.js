@@ -24,7 +24,8 @@ import {headingDistanceTo, createLocation, normalizeHeading} from 'geolocation-u
 import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
 import {BuzzerConstants, Buzzer} from "./Buzzer";
-
+import {FULLTILT} from "fulltilt-ng";
+import AppMessages from "./AppMessages";
 
 Amplify.configure(awsmobile);
 
@@ -40,8 +41,6 @@ const {
 
 function App() {
     const [requiredDirection, setRequiredDirection] = React.useState(0);
-    const [actualMovingDirection, setActualMovingDirection] = React.useState(0);
-    const [actualMovingSpeed, setActualMovingSpeed] = React.useState(0);
     const [distance, setDistance] = React.useState(0);
     const [accuracy, setAccuracy] = React.useState(0);
     const [currentCoordinates, setCurrentCoordinates] = React.useState(null);
@@ -54,6 +53,64 @@ function App() {
     const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
     const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
+    const [deviceOrientation, setDeviceOrientation] = React.useState(null);
+    const [deviceOrientationPermission, setDeviceOrientationPermission] = React.useState(null);
+    const [messages] = React.useState({
+        errors: [],
+        warnings: [],
+        infos: [],
+        error(msg) {
+            this.errors.push(msg);
+        },
+        warn(msg) {
+            this.warnings.push(msg);
+        },
+        info(msg) {
+            this.infos.push(msg);
+        }
+    });
+    const deviceOrientationRef = useRef({alpha: 0});
+    useEffect(() => {
+        const errorMsgSystemIncompatible = "Current device does not support orientation change.";
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+
+            DeviceOrientationEvent.requestPermission().then(async permState => {
+                if (permState !== 'granted') {
+                    messages.error('Permission denied by user.')
+                }
+                setDeviceOrientationPermission(permState);
+            });
+        } else if (!messages.errors.includes(errorMsgSystemIncompatible)) {
+            messages.error(errorMsgSystemIncompatible);
+        }
+    });
+
+    useEffect(() => {
+        if (deviceOrientationPermission) {
+            if (deviceOrientationPermission === 'granted') {
+                try {
+                    FULLTILT.getDeviceOrientation({
+                        type: 'world'
+                    }).then((orientation) => {
+                        if (orientation) {
+                            const euler = orientation.getScreenAdjustedEuler();
+                            const alphaNewValue = euler.alpha;
+
+                            if (Math.abs(deviceOrientationRef.current.alpha - alphaNewValue) > 1) {
+                                setDeviceOrientation({euler});
+                                deviceOrientationRef.current.alpha = alphaNewValue;
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error('Device orientation error', e);
+                    messages.error('Device orientation error: ' + e);
+                }
+            }
+        }
+    }); //[]); //empty array means execute once after component render
+
     const ref = useRef({userSoundSettings: {
         initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
         }});
@@ -72,14 +129,6 @@ function App() {
             console.debug('To: ' + JSON.stringify(to));
 
             let headingAndDistance = headingDistanceTo(from, to);
-            const deviceHeading = currentCoordinates?.deviceHeading;
-            if (deviceHeading) {
-                setActualMovingDirection(Math.round(deviceHeading));
-            }
-            const deviceSpeed = currentCoordinates?.deviceSpeed;
-            if (deviceSpeed) {
-                setActualMovingSpeed(deviceSpeed.toPrecision(1));
-            }
             if (headingAndDistance) {
                 setRequiredDirection(Math.round(normalizeHeading(headingAndDistance.heading)));
                 setDistance(Number(headingAndDistance.distance.toPrecision(1)));
@@ -91,9 +140,7 @@ function App() {
 
     useEffect(() => {
         if (explorationInProgress) {
-            const newBalance = (requiredDirection - actualMovingDirection) / 360;
-
-            console.debug(`(${requiredDirection} - ${actualMovingDirection}) / 360 = ${newBalance}`);
+            const newBalance = (requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha))) / 360;
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
             if (distance) {
@@ -104,7 +151,7 @@ function App() {
                 console.debug(`Set frequency=${frequency} for distance=${distance}`);
             }
         }
-    }, [requiredDirection, actualMovingDirection, distance, buzzer, explorationInProgress]);
+    }, [requiredDirection, distance, buzzer, explorationInProgress, deviceOrientation]);
 
 
     const handleStartStop = (event) => {
@@ -194,6 +241,7 @@ function App() {
                     <Typography component="h1" variant="h4" align="center">
                         GPS
                     </Typography>
+                    <AppMessages errors={messages.errors} warnings={messages.warnings} infos={messages.infos}/>
                     <React.Fragment>
                         <div>
                             <FormControl>
@@ -234,18 +282,9 @@ function App() {
                         <div>
                             <FormControl disabled>
                                 <TextField
-                                    id="movement-direction"
-                                    label="Movement direction"
-                                    helperText="Degrees"
-                                    value={actualMovingDirection}
-                                />
-                            </FormControl>
-                            <FormControl disabled>
-                                <TextField
-                                    id="movement-speed"
-                                    label="Movement speed"
-                                    helperText="m/s"
-                                    value={actualMovingSpeed}
+                                    id="device-orientation"
+                                    label="Compass heading"
+                                    value={deviceOrientation ? 360 - Math.round(deviceOrientation.euler.alpha) : 'N/A'}
                                 />
                             </FormControl>
                         </div>
@@ -313,7 +352,8 @@ function App() {
                             </Grid>
                         </div>
                         <div className={classes.buttons}>
-                            <Button onClick={handleStartStop} variant='contained' className={classes.button}>
+                            <Button onClick={handleStartStop} variant='contained' className={classes.button}
+                                    disabled={Boolean(messages.errors.length)}>
                                 {explorationInProgress ? 'Stop' : 'Start'}
                             </Button>
                         </div>

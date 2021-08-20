@@ -32,14 +32,18 @@ export default class GpsTracker extends React.Component {
     }
 
     positionChanged(pos) {
-        console.debug('Position changed: ' + new Date().toLocaleTimeString() + ': ' + JSON.stringify(pos.coords));
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const accuracy = pos.coords.accuracy;
-        const deviceHeading = pos.coords.heading;
-        const deviceSpeed = pos.coords.speed;
+        const {latitude: lat, longitude:lng, altitude: alt, accuracy, altitudeAccuracy, heading: deviceHeading,
+            speed: deviceSpeed} = pos.coords;
+
+        console.debug(`Position changed at ${new Date().toTimeString()}: 
+        lat: ${lat}
+        lng: ${lng}
+        alt: ${alt}
+        accuracy: ${accuracy},
+        altitudeAccuracy: ${altitudeAccuracy}
+        deviceHeading: ${deviceHeading}
+        deviceSpeed: ${deviceSpeed}`);
         const newCoords = {lat, lng, accuracy, deviceHeading, deviceSpeed};
-        console.debug(`New GPS coordinates: ${JSON.stringify(newCoords)}`);
         if ('updateCoordinates' in this.props) {
             this.props.updateCoordinates(newCoords);
         }

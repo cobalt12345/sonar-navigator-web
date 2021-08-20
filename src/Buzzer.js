@@ -15,7 +15,7 @@ export const BuzzerConstants = {
         MIN_BALANCE: -1.0,
         NORM_BALANCE: 0.0,
         MAX_BALANCE: 1.0,
-        BALANCE_STEP: 0.1
+        BALANCE_STEP: 0.005
     }
 };
 
