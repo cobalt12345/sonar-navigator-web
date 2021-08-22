@@ -1,4 +1,3 @@
-import LogsContainer from './LogsContainer';
 import './App.css';
 import Amplify from 'aws-amplify';
 import Styles from './styles';
@@ -25,7 +24,10 @@ import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
 import {BuzzerConstants, Buzzer} from "./Buzzer";
 import {FULLTILT} from "fulltilt-ng";
-import AppMessages from "./AppMessages";
+//Load only if device supports orientation change API
+const RequestPermissions = React.lazy(() => import('./RequestPermissions'));
+const PanicMonger = React.lazy(() => import('./PanicMonger'));
+const LogsContainer = React.lazy(() => import('./LogsContainer'));
 
 Amplify.configure(awsmobile);
 
@@ -53,67 +55,56 @@ function App() {
     const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
     const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
+    const [deviceOrientationSupported, setDeviceOrientationSupported] = React.useState(null);
     const [deviceOrientation, setDeviceOrientation] = React.useState(null);
     const [deviceOrientationPermission, setDeviceOrientationPermission] = React.useState(null);
-    const [messages] = React.useState({
-        errors: [],
-        warnings: [],
-        infos: [],
-        error(msg) {
-            this.errors.push(msg);
-        },
-        warn(msg) {
-            this.warnings.push(msg);
-        },
-        info(msg) {
-            this.infos.push(msg);
-        }
-    });
-    const deviceOrientationRef = useRef({alpha: 0});
+
+    /**
+     * Check if device supports orientation change.
+     * Run once.
+     */
     useEffect(() => {
-        const errorMsgSystemIncompatible = "Current device does not support orientation change.";
         if (typeof DeviceOrientationEvent !== 'undefined' &&
             typeof DeviceOrientationEvent.requestPermission === 'function') {
-
-            DeviceOrientationEvent.requestPermission().then(async permState => {
-                if (permState !== 'granted') {
-                    messages.error('Permission denied by user.')
-                }
-                setDeviceOrientationPermission(permState);
-            });
-        } else if (!messages.errors.includes(errorMsgSystemIncompatible)) {
-            messages.error(errorMsgSystemIncompatible);
+            setDeviceOrientationSupported(true);
+        } else {
+            setDeviceOrientationSupported(false);
+            alert('Device doesn\'t support orientation change.');
         }
-    });
+    }, []); //execute just once
 
     useEffect(() => {
-        if (deviceOrientationPermission) {
-            if (deviceOrientationPermission === 'granted') {
-                try {
-                    FULLTILT.getDeviceOrientation({
-                        type: 'world'
-                    }).then((orientation) => {
-                        if (orientation) {
-                            const euler = orientation.getScreenAdjustedEuler();
-                            const alphaNewValue = euler.alpha;
+        if (deviceOrientationPermission && deviceOrientationPermission !== 'granted') {
+            alert('Permission declined.');
+        }
+    }, [deviceOrientationPermission]);
 
-                            if (Math.abs(deviceOrientationRef.current.alpha - alphaNewValue) > 1) {
-                                setDeviceOrientation({euler});
-                                deviceOrientationRef.current.alpha = alphaNewValue;
+    const deviceOrientationRef = useRef({alpha: 0});
+
+    useEffect(() => {
+            if (deviceOrientationPermission) {
+                if(deviceOrientationPermission === 'granted') {
+                    try {
+                        FULLTILT.getDeviceOrientation({
+                            type: 'world'
+                        }).then((orientation) => {
+                            if (orientation) {
+                                const euler = orientation.getScreenAdjustedEuler();
+                                const alphaNewValue = euler.alpha;
+
+                                if (Math.abs(deviceOrientationRef.current.alpha - alphaNewValue) > 1) {
+                                    setDeviceOrientation({euler});
+                                    deviceOrientationRef.current.alpha = alphaNewValue;
+                                }
                             }
-                        }
-                    });
-                } catch (e) {
-                    console.error('Device orientation error', e);
-                    messages.error('Device orientation error: ' + e);
+                        });
+                    } catch (e) {
+                        console.error('Device orientation error', e);
+                        alert('Device orientation error', e);
+                    }
                 }
             }
-        }
-    }); //[]); //empty array means execute once after component render
-
-    const ref = useRef({userSoundSettings: {
-        initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
-        }});
+    });
 
     useEffect(() => {
         if (currentCoordinates && targetCoordinates) {
@@ -121,28 +112,41 @@ function App() {
                 Number(currentCoordinates?.lng), 'LatLng');
 
             console.debug('From: ' + JSON.stringify(from));
+            // (lat, lon) - format for Google maps
+            let targetCoordinatesFormatted = targetCoordinates.startsWith('(') && targetCoordinates.endsWith(')') ?
+                targetCoordinates.slice(1, targetCoordinates.length - 1) : targetCoordinates;
 
-            const [targetLat, targetLng] = targetCoordinates.split(',');
+            let [targetLat, targetLng] = targetCoordinatesFormatted.split(',');
+
             const to = createLocation(parseFloat(targetLat),
                 parseFloat(targetLng), 'LatLng');
 
             console.debug('To: ' + JSON.stringify(to));
 
-            let headingAndDistance = headingDistanceTo(from, to);
-            if (headingAndDistance) {
+            if (to && to.lat && to.lng) {
+                let headingAndDistance = headingDistanceTo(from, to);
                 setRequiredDirection(Math.round(normalizeHeading(headingAndDistance.heading)));
-                setDistance(Number(headingAndDistance.distance.toPrecision(1)));
+                setDistance(Number(headingAndDistance.distance.toFixed(1)));
                 console.debug('Heading distance: ' + headingAndDistance.distance);
                 setAccuracy(currentCoordinates.accuracy);
             }
         }
-    }, [targetCoordinates, currentCoordinates]);
+    }, [currentCoordinates, currentCoordinates?.lat, currentCoordinates?.lng, currentCoordinates?.accuracy,
+        targetCoordinates]);
+
+    const ref = useRef({userSoundSettings: {
+            initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
+    }});
 
     useEffect(() => {
         if (explorationInProgress) {
-            const newBalance = (requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha))) / 360;
+            const newNormalBalance = (requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha)))
+                * BALANCE_STEP;
+
+            const newBalance = newNormalBalance - ref.current.userSoundSettings.initBalance;
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
+            console.debug(`Set balance=${newBalance}`);
             if (distance) {
                 let frequency = MAX_FREQUENCY / distance + ref.current.userSoundSettings.initFrequency;
                 console.debug('New frequency: ' + frequency);
@@ -151,7 +155,7 @@ function App() {
                 console.debug(`Set frequency=${frequency} for distance=${distance}`);
             }
         }
-    }, [requiredDirection, distance, buzzer, explorationInProgress, deviceOrientation]);
+    }, [requiredDirection, deviceOrientation, distance, buzzer, explorationInProgress]);
 
 
     const handleStartStop = (event) => {
@@ -178,6 +182,9 @@ function App() {
     const coordsValid = (coords) => {
         let isValid = true;
         try {
+            if (coords.startsWith('(') && coords.endsWith(')')) { //copied from google maps
+                coords = coords.substr(1, coords.length - 2);
+            }
             let [lat, lng] = coords.split(',');
             lat = parseFloat(lat);
             lng = parseFloat(lng);
@@ -225,13 +232,23 @@ function App() {
         buzzer.setBalance(newValue);
     }
 
+
+    let dialog;
+    if (deviceOrientationSupported) {
+        dialog = <RequestPermissions permsRequired={deviceOrientationPermission !== 'granted'}
+                                     callback={setDeviceOrientationPermission}/>;
+    } else {
+        dialog = null;
+    }
+
     return (
         <React.Fragment>
             <CssBaseline/>
             <AppBar position="absolute" color="default" className={classes.appBar}>
                 <Toolbar>
-                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap onDoubleClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
-                        Sonar Navigator
+                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap
+                                onDoubleClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
+                        Echo Discovery
                     </Typography>
                 </Toolbar>
                 {explorationInProgress ? <LinearProgress variant='indeterminate'/> : null}
@@ -241,7 +258,6 @@ function App() {
                     <Typography component="h1" variant="h4" align="center">
                         GPS
                     </Typography>
-                    <AppMessages errors={messages.errors} warnings={messages.warnings} infos={messages.infos}/>
                     <React.Fragment>
                         <div>
                             <FormControl>
@@ -353,17 +369,24 @@ function App() {
                         </div>
                         <div className={classes.buttons}>
                             <Button onClick={handleStartStop} variant='contained' className={classes.button}
-                                    disabled={Boolean(messages.errors.length)}>
+                                    disabled={!deviceOrientationSupported || deviceOrientationPermission !== 'granted'}>
                                 {explorationInProgress ? 'Stop' : 'Start'}
                             </Button>
                         </div>
                     </React.Fragment>
                 </Paper>
             </main>
-            {
-                inlineConsoleVisible &&
-                <LogsContainer classes={classes}/>
-            }
+            <React.Suspense fallback={<div>Loading...</div>}>
+                <LogsContainer classes={classes} visible={inlineConsoleVisible} />
+                <div>{dialog}</div>
+                {
+                    deviceOrientationSupported && deviceOrientationPermission === 'granted' &&
+                    <PanicMonger callback={(event) => {
+                        console.debug('Device shaked', Object.entries(event));
+                        window.location.replace('http://google.ru');
+                    }}/>
+                }
+            </React.Suspense>
         </React.Fragment>
     );
 }
