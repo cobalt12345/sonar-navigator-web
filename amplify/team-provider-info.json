@@ -1,20 +1,20 @@
 {
     "dev": {
         "awscloudformation": {
-            "AuthRoleName": "amplify-sonarnavigatorweb-dev-115755-authRole",
-            "UnauthRoleArn": "arn:aws:iam::469694857107:role/amplify-sonarnavigatorweb-dev-115755-unauthRole",
-            "AuthRoleArn": "arn:aws:iam::469694857107:role/amplify-sonarnavigatorweb-dev-115755-authRole",
+            "AuthRoleName": "amplify-sonarnavigatorweb-dev-185824-authRole",
+            "UnauthRoleArn": "arn:aws:iam::785668202743:role/amplify-sonarnavigatorweb-dev-185824-unauthRole",
+            "AuthRoleArn": "arn:aws:iam::785668202743:role/amplify-sonarnavigatorweb-dev-185824-authRole",
             "Region": "eu-central-1",
-            "DeploymentBucketName": "amplify-sonarnavigatorweb-dev-115755-deployment",
-            "UnauthRoleName": "amplify-sonarnavigatorweb-dev-115755-unauthRole",
-            "StackName": "amplify-sonarnavigatorweb-dev-115755",
-            "StackId": "arn:aws:cloudformation:eu-central-1:469694857107:stack/amplify-sonarnavigatorweb-dev-115755/e82af0c0-ef81-11eb-b73c-0644bfa5fad4",
-            "AmplifyAppId": "d366akqigc6kdi"
+            "DeploymentBucketName": "amplify-sonarnavigatorweb-dev-185824-deployment",
+            "UnauthRoleName": "amplify-sonarnavigatorweb-dev-185824-unauthRole",
+            "StackName": "amplify-sonarnavigatorweb-dev-185824",
+            "StackId": "arn:aws:cloudformation:eu-central-1:785668202743:stack/amplify-sonarnavigatorweb-dev-185824/1d3c6e40-09ab-11ec-9146-0245a833fa56",
+            "AmplifyAppId": "dtnichtsa69tx"
         },
         "categories": {
             "hosting": {
                 "amplifyhosting": {
-                    "appId": "d366akqigc6kdi",
+                    "appId": "dtnichtsa69tx",
                     "type": "manual"
                 }
             }

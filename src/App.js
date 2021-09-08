@@ -24,6 +24,7 @@ import awsmobile from './aws-exports';
 import GpsTracker from "./GpsTracker";
 import {BuzzerConstants, Buzzer} from "./Buzzer";
 import {FULLTILT} from "fulltilt-ng";
+
 //Load only if device supports orientation change API
 const RequestPermissions = React.lazy(() => import('./RequestPermissions'));
 const PanicMonger = React.lazy(() => import('./PanicMonger'));
@@ -82,29 +83,27 @@ function App() {
     const deviceOrientationRef = useRef({alpha: 0});
 
     useEffect(() => {
-            if (deviceOrientationPermission) {
-                if(deviceOrientationPermission === 'granted') {
-                    try {
-                        FULLTILT.getDeviceOrientation({
-                            type: 'world'
-                        }).then((orientation) => {
-                            if (orientation) {
-                                const euler = orientation.getScreenAdjustedEuler();
-                                const alphaNewValue = euler.alpha;
-
-                                if (Math.abs(deviceOrientationRef.current.alpha - alphaNewValue) > 1) {
-                                    setDeviceOrientation({euler});
-                                    deviceOrientationRef.current.alpha = alphaNewValue;
-                                }
-                            }
-                        });
-                    } catch (e) {
-                        console.error('Device orientation error', e);
-                        alert('Device orientation error', e);
-                    }
-                }
+        if (deviceOrientationPermission) {
+            if (deviceOrientationPermission === 'granted') {
+                FULLTILT.getDeviceOrientation({
+                    type: 'world'
+                }).then((orientation) => {
+                    orientation.start(() => {
+                        const euler = orientation.getScreenAdjustedEuler();
+                        const alphaNewValue = euler.alpha;
+                        setDeviceOrientation({euler});
+                        if (Math.abs(deviceOrientationRef.current.alpha - alphaNewValue) > 1) {
+                            setDeviceOrientation({euler});
+                            deviceOrientationRef.current.alpha = alphaNewValue;
+                        }
+                    });
+                }).catch((error) => {
+                    console.error(error);
+                    alert(error);
+                });
             }
-    });
+        }
+    }, [deviceOrientationPermission]);
 
     useEffect(() => {
         if (currentCoordinates && targetCoordinates) {
@@ -140,19 +139,32 @@ function App() {
 
     useEffect(() => {
         if (explorationInProgress) {
-            const newNormalBalance = (requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha)))
-                * BALANCE_STEP;
+            console.debug('Device orientation: ' + deviceOrientation.euler.alpha);
+            console.debug('Target direction: ' + requiredDirection);
 
-            const newBalance = newNormalBalance - ref.current.userSoundSettings.initBalance;
+            let turnAngle = requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha));
+            if (Math.abs(turnAngle) >= 180) {
+                if (turnAngle >= 0) {
+                    turnAngle -= 360;
+                } else {
+                    turnAngle += 360;
+                }
+            }
+            console.debug('Turn on ' + turnAngle + ' degrees');
+            const newNormalBalance = turnAngle / 180;
+            console.debug('Normal balance: ' + newNormalBalance);
+            const newBalance = Math.floor((newNormalBalance + ref.current.userSoundSettings.initBalance)
+                / BALANCE_STEP) * BALANCE_STEP;
+            console.debug('Precised balance: '+ newBalance);
+            // const newBalance = (Math.floor((newNormalBalance - ref.current.userSoundSettings.initBalance)
+            //         / BALANCE_STEP) * BALANCE_STEP);
+
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
-            console.debug(`Set balance=${newBalance}`);
             if (distance) {
                 let frequency = MAX_FREQUENCY / distance + ref.current.userSoundSettings.initFrequency;
-                console.debug('New frequency: ' + frequency);
                 setFrequency(frequency);
                 buzzer.frequency(frequency);
-                console.debug(`Set frequency=${frequency} for distance=${distance}`);
             }
         }
     }, [requiredDirection, deviceOrientation, distance, buzzer, explorationInProgress]);
