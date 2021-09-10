@@ -153,6 +153,7 @@ function App() {
             console.debug('Turn on ' + turnAngle + ' degrees');
             const newNormalBalance = turnAngle / 180;
             console.debug('Normal balance: ' + newNormalBalance);
+            //INCORRECT! FOLLOWING MUST BE DONE VIA PROPORTIONS
             const newBalance = Math.floor((newNormalBalance + ref.current.userSoundSettings.initBalance)
                 / BALANCE_STEP) * BALANCE_STEP;
             console.debug('Precised balance: '+ newBalance);
