@@ -39,7 +39,7 @@ const useStyles = makeStyles(theme => {
 const {
     Frequency: {MIN_FREQUENCY, MAX_FREQUENCY, FREQUENCY_STEP},
     Volume: {MIN_VOLUME, MAX_VOLUME, VOLUME_STEP},
-    Balance: {MIN_BALANCE, MAX_BALANCE, NORM_BALANCE, BALANCE_STEP}
+    Balance: {MIN_BALANCE, MAX_BALANCE, BALANCE_STEP}
 } = BuzzerConstants;
 
 function App() {
@@ -51,8 +51,15 @@ function App() {
     const [coordinatesValid, setCoordinatesValid] = React.useState(true);
     const [explorationInProgress, setExplorationInProgress] = React.useState(false);
     const classes = useStyles();
-    const [buzzer] = React.useState(new Buzzer({volumeHi: 0.02, volumeFrequency: 1, balance: 0.0}));
-    const [volume, setVolume] = React.useState(buzzer.sound.volume);
+    const [buzzer] = React.useState(new Buzzer({volumeLeft: 0.02, volumeRight: 0.02}, 0.0,
+        1));
+
+    const [volume, setVolume] = React.useState(
+        {
+            volumeLeft: buzzer.sound.left.volume,
+            volumeRight: buzzer.sound.right.volume
+        });
+
     const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
     const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
@@ -134,14 +141,11 @@ function App() {
         targetCoordinates]);
 
     const ref = useRef({userSoundSettings: {
-            initFrequency: MIN_FREQUENCY, initBalance: NORM_BALANCE
+            initFrequency: MIN_FREQUENCY
     }});
 
     useEffect(() => {
         if (explorationInProgress) {
-            console.debug('Device orientation: ' + deviceOrientation.euler.alpha);
-            console.debug('Target direction: ' + requiredDirection);
-
             let turnAngle = requiredDirection - (360 - Math.round(deviceOrientation.euler.alpha));
             if (Math.abs(turnAngle) >= 180) {
                 if (turnAngle >= 0) {
@@ -150,16 +154,8 @@ function App() {
                     turnAngle += 360;
                 }
             }
-            console.debug('Turn on ' + turnAngle + ' degrees');
             const newNormalBalance = turnAngle / 180;
-            console.debug('Normal balance: ' + newNormalBalance);
-            //INCORRECT! FOLLOWING MUST BE DONE VIA PROPORTIONS
-            const newBalance = Math.floor((newNormalBalance + ref.current.userSoundSettings.initBalance)
-                / BALANCE_STEP) * BALANCE_STEP;
-            console.debug('Precised balance: '+ newBalance);
-            // const newBalance = (Math.floor((newNormalBalance - ref.current.userSoundSettings.initBalance)
-            //         / BALANCE_STEP) * BALANCE_STEP);
-
+            const newBalance = Math.floor(newNormalBalance / BALANCE_STEP) * BALANCE_STEP;
             setBalance(newBalance);
             buzzer.setBalance(newBalance);
             if (distance) {
@@ -179,10 +175,6 @@ function App() {
             const userInitFrequency = ref.current.userSoundSettings.initFrequency;
             setFrequency(userInitFrequency);
             buzzer.frequency(userInitFrequency);
-            const userInitBalance = ref.current.userSoundSettings.initBalance;
-            setBalance(userInitBalance);
-            buzzer.setBalance(userInitBalance);
-
             if (explorationInProgress) {
                 buzzer.stop();
             } else {
@@ -216,9 +208,14 @@ function App() {
      * @param event
      * @param newValue
      */
-    const handleVolumeChange = (event, newValue) => {
-        setVolume(newValue);
-        buzzer.volume(newValue);
+    const handleVolumeChange = (event, newValue, target) => {
+        setVolume(previousState => {
+            let modifiedStateValues = {[target]: newValue};
+            let mergedState = {...previousState, ...modifiedStateValues};
+            buzzer.volume(mergedState);
+
+            return mergedState;
+        });
     }
 
     /**
@@ -236,6 +233,7 @@ function App() {
     /**
      * Slider action.
      *
+     * @deprecated balance must not be managed by user
      * @param event
      * @param newValue
      */
@@ -257,20 +255,13 @@ function App() {
     return (
         <React.Fragment>
             <CssBaseline/>
-            <AppBar position="absolute" color="default" className={classes.appBar}>
-                <Toolbar>
-                    <Typography id="sonarNavigatorAppName" variant="h6" color="inherit" noWrap
-                                onDoubleClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}>
-                        Echo Discovery
-                    </Typography>
-                </Toolbar>
-                {explorationInProgress ? <LinearProgress variant='indeterminate'/> : null}
-            </AppBar>
             <main className={classes.layout}>
                 <Paper className={classes.paper}>
-                    <Typography component="h1" variant="h4" align="center">
+                    <Typography onDoubleClick={() => setInlineConsoleVisible(!inlineConsoleVisible)}
+                                component="h1" variant="h4" align="center">
                         GPS
                     </Typography>
+                    {explorationInProgress ? <LinearProgress variant='indeterminate'/> : null}
                     <React.Fragment>
                         <div>
                             <FormControl>
@@ -322,15 +313,37 @@ function App() {
                         </div>
                         <div>
                             <Typography gutterBottom>
-                                Volume
+                                Volume Left
                             </Typography>
                             <Grid container spacing={2}>
                                 <Grid item>
                                     <VolumeDown />
                                 </Grid>
                                 <Grid item xs>
-                                    <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP} value={volume}
-                                            onChange={handleVolumeChange} aria-labelledby="continuous-slider" />
+                                    <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP}
+                                            value={volume.volumeLeft}
+                                            onChange={(e, v)=>handleVolumeChange(e,v,
+                                                'volumeLeft')}
+                                                aria-labelledby="continuous-slider" />
+                                </Grid>
+                                <Grid item>
+                                    <VolumeUp />
+                                </Grid>
+                            </Grid>
+                        </div>
+                        <div>
+                            <Typography gutterBottom>
+                                Volume Right
+                            </Typography>
+                            <Grid container spacing={2}>
+                                <Grid item>
+                                    <VolumeDown />
+                                </Grid>
+                                <Grid item xs>
+                                    <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP}
+                                            value={volume.volumeRight}
+                                            onChange={(e,v)=>handleVolumeChange(e,v,
+                                                'volumeRight')} aria-labelledby="continuous-slider" />
                                 </Grid>
                                 <Grid item>
                                     <VolumeUp />
@@ -369,11 +382,11 @@ function App() {
                                 </Grid>
                                 <Grid item xs>
                                     <Slider min={MIN_BALANCE} max={MAX_BALANCE} step={BALANCE_STEP} value={balance}
-                                            onChange={handleBalanceChange} aria-labelledby="continuous-slider"
-                                            onChangeCommitted={() => {
+                                            /*onChange={handleBalanceChange}*/ aria-labelledby="continuous-slider"
+                                            /*onChangeCommitted={() => {
                                                 buzzer.pause();
-                                                ref.current.userSoundSettings.initBalance = balance;}}
-                                            disabled={explorationInProgress} />
+                                                ref.current.userSoundSettings.initBalance = balance;}}*/
+                                            disabled={true} />
                                 </Grid>
                                 <Grid item>
                                     <ArrowRight />
