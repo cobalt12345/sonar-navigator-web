@@ -1,22 +1,21 @@
 import './App.css';
 import Amplify from 'aws-amplify';
 import Styles from './styles';
+import {LogDecorator} from "./utils";
 import {makeStyles} from '@material-ui/core/styles';
 import React, {useEffect, useRef} from 'react';
 import {VolumeDown, VolumeUp, ExpandMore, ExpandLess, ArrowLeft, ArrowRight} from '@material-ui/icons';
 import {
-    Toolbar,
     Typography,
     Button,
     Paper,
-    AppBar,
     FormControl,
     FormHelperText,
     CssBaseline,
     LinearProgress,
     TextField,
     Slider,
-    Grid
+    Grid,
 } from '@material-ui/core';
 
 import {headingDistanceTo, createLocation, normalizeHeading} from 'geolocation-utils';
@@ -42,6 +41,9 @@ const {
     Balance: {MIN_BALANCE, MAX_BALANCE, BALANCE_STEP}
 } = BuzzerConstants;
 
+// const buzzer = new LogDecorator(new Buzzer({volumeLeft: 0.2, volumeRight: 0.2}, 0.0, 1));
+const buzzer = new Buzzer({volumeLeft: 0.2, volumeRight: 0.2}, 0.0, 1);
+
 function App() {
     const [requiredDirection, setRequiredDirection] = React.useState(0);
     const [distance, setDistance] = React.useState(0);
@@ -51,17 +53,16 @@ function App() {
     const [coordinatesValid, setCoordinatesValid] = React.useState(true);
     const [explorationInProgress, setExplorationInProgress] = React.useState(false);
     const classes = useStyles();
-    const [buzzer] = React.useState(new Buzzer({volumeLeft: 0.02, volumeRight: 0.02}, 0.0,
-        1));
+    const [buzzerState] = React.useState(buzzer);
 
-    const [volume, setVolume] = React.useState(
-        {
-            volumeLeft: buzzer.sound.left.volume,
-            volumeRight: buzzer.sound.right.volume
-        });
+    // const [volume, setVolume] = React.useState(
+    //     {
+    //         volumeLeft: buzzerState.sound.left.volume,
+    //         volumeRight: buzzerState.sound.right.volume
+    //     });
 
-    const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
-    const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
+    const [frequency, setFrequency] = React.useState(buzzerState.sound.frequency);
+    const [balance, setBalance] = React.useState(buzzerState.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
     const [deviceOrientationSupported, setDeviceOrientationSupported] = React.useState(null);
     const [deviceOrientation, setDeviceOrientation] = React.useState(null);
@@ -157,14 +158,14 @@ function App() {
             const newNormalBalance = turnAngle / 180;
             const newBalance = Math.floor(newNormalBalance / BALANCE_STEP) * BALANCE_STEP;
             setBalance(newBalance);
-            buzzer.setBalance(newBalance);
+            buzzerState.setBalance(newBalance);
             if (distance) {
                 let frequency = MAX_FREQUENCY / distance + ref.current.userSoundSettings.initFrequency;
                 setFrequency(frequency);
-                buzzer.frequency(frequency);
+                buzzerState.frequency(frequency);
             }
         }
-    }, [requiredDirection, deviceOrientation, distance, buzzer, explorationInProgress]);
+    }, [requiredDirection, deviceOrientation, distance, /*buzzerState,*/ explorationInProgress]);
 
 
     const handleStartStop = (event) => {
@@ -174,11 +175,11 @@ function App() {
         if (validCoords) {
             const userInitFrequency = ref.current.userSoundSettings.initFrequency;
             setFrequency(userInitFrequency);
-            buzzer.frequency(userInitFrequency);
+            buzzerState.frequency(userInitFrequency);
             if (explorationInProgress) {
-                buzzer.stop();
+                buzzerState.stop();
             } else {
-                buzzer.play();
+                buzzerState.play();
             }
             setExplorationInProgress(!explorationInProgress);
         }
@@ -209,13 +210,16 @@ function App() {
      * @param newValue
      */
     const handleVolumeChange = (event, newValue, target) => {
-        setVolume(previousState => {
-            let modifiedStateValues = {[target]: newValue};
-            let mergedState = {...previousState, ...modifiedStateValues};
-            buzzer.volume(mergedState);
-
-            return mergedState;
-        });
+        let previousState = {
+            volumeLeft: buzzerState.sound.left.volume,
+            volumeRight: buzzerState.sound.right.volume
+        };
+        let modifiedStateValues = {[target]: newValue};
+        let mergedState = {...previousState, ...modifiedStateValues};
+        console.debug('Previous volume settings: ' + Object.entries(previousState));
+        console.debug('Modified volume settings: ' + Object.entries(modifiedStateValues));
+        console.debug('Merged volume settings: ' + Object.entries(mergedState));
+        buzzerState.volume(mergedState);
     }
 
     /**
@@ -225,9 +229,9 @@ function App() {
      * @param newValue
      */
     const handleFrequencyChange = (event, newValue) => {
-        buzzer.play();
+        buzzerState.play();
         setFrequency(newValue);
-        buzzer.frequency(newValue);
+        buzzerState.frequency(newValue);
     }
 
     /**
@@ -238,9 +242,9 @@ function App() {
      * @param newValue
      */
     const handleBalanceChange = (event, newValue) => {
-        buzzer.play();
+        buzzerState.play();
         setBalance(newValue);
-        buzzer.setBalance(newValue);
+        buzzerState.setBalance(newValue);
     }
 
 
@@ -312,7 +316,7 @@ function App() {
                             <GpsTracker updateCoordinates={setCurrentCoordinates} />
                         </div>
                         <div>
-                            <Typography gutterBottom>
+                            <Typography gutterBottom id='volume-left'>
                                 Volume Left
                             </Typography>
                             <Grid container spacing={2}>
@@ -321,10 +325,13 @@ function App() {
                                 </Grid>
                                 <Grid item xs>
                                     <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP}
-                                            value={volume.volumeLeft}
+                                            marks
+                                            valueLabelFormat={value => Math.trunc(value * 100) + '%'}
+                                            valueLabelDisplay='auto'
+                                            value={buzzerState.sound.left.volume}
                                             onChange={(e, v)=>handleVolumeChange(e,v,
                                                 'volumeLeft')}
-                                                aria-labelledby="continuous-slider" />
+                                            aria-labelledby="volume-left" />
                                 </Grid>
                                 <Grid item>
                                     <VolumeUp />
@@ -332,7 +339,7 @@ function App() {
                             </Grid>
                         </div>
                         <div>
-                            <Typography gutterBottom>
+                            <Typography gutterBottom id='volume-right'>
                                 Volume Right
                             </Typography>
                             <Grid container spacing={2}>
@@ -341,9 +348,13 @@ function App() {
                                 </Grid>
                                 <Grid item xs>
                                     <Slider min={MIN_VOLUME} max={MAX_VOLUME} step={VOLUME_STEP}
-                                            value={volume.volumeRight}
+                                            marks
+                                            valueLabelFormat={value => (Math.trunc(value * 100) + '%')}
+                                            valueLabelDisplay='auto'
+                                            value={buzzerState.sound.right.volume}
                                             onChange={(e,v)=>handleVolumeChange(e,v,
-                                                'volumeRight')} aria-labelledby="continuous-slider" />
+                                                'volumeRight')}
+                                            aria-labelledby="volume-right" />
                                 </Grid>
                                 <Grid item>
                                     <VolumeUp />
@@ -363,7 +374,7 @@ function App() {
                                             disabled={explorationInProgress}
                                             onChange={handleFrequencyChange}
                                             onChangeCommitted={() => {
-                                                buzzer.pause();
+                                                buzzerState.pause();
                                                 ref.current.userSoundSettings.initFrequency = frequency;
                                             }} aria-labelledby="continuous-slider" />
                                 </Grid>
@@ -384,7 +395,7 @@ function App() {
                                     <Slider min={MIN_BALANCE} max={MAX_BALANCE} step={BALANCE_STEP} value={balance}
                                             /*onChange={handleBalanceChange}*/ aria-labelledby="continuous-slider"
                                             /*onChangeCommitted={() => {
-                                                buzzer.pause();
+                                                buzzerState.pause();
                                                 ref.current.userSoundSettings.initBalance = balance;}}*/
                                             disabled={true} />
                                 </Grid>
@@ -396,6 +407,7 @@ function App() {
                         <div className={classes.buttons}>
                             <Button onClick={handleStartStop} variant='contained' className={classes.button}
                                     disabled={!deviceOrientationSupported || deviceOrientationPermission !== 'granted'}>
+
                                 {explorationInProgress ? 'Stop' : 'Start'}
                             </Button>
                         </div>

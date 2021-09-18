@@ -9,7 +9,7 @@ export const BuzzerConstants = {
     Volume: {
         MIN_VOLUME: 0.0,
         MAX_VOLUME: 1.0,
-        VOLUME_STEP: 0.01,
+        VOLUME_STEP: 0.05,
     },
     Balance: {
         ONLY_LEFT: -1.0,
@@ -23,11 +23,12 @@ export const BuzzerConstants = {
 
 export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
                        balance = BuzzerConstants.Balance.NORM_BALANCE,
-                       volumeFrequency = 440) {
+                       volumeFrequency = BuzzerConstants.Balance.MIN_FREQUENCY) {
 
     let left = new Pizzicato.Sound({
             source: 'wave',
             options: {
+                detached: false,
                 type: 'sawtooth',
                 volume: volumeLeft,
                 frequency: volumeFrequency
@@ -38,6 +39,7 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
     let right = new Pizzicato.Sound({
             source: 'wave',
             options: {
+                detached: false,
                 type: 'sawtooth',
                 volume: volumeRight,
                 frequency: volumeFrequency
@@ -52,7 +54,7 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
             this.left.frequency = this.right.frequency = value;
         },
         get frequency() {
-            return this.left || this.right;
+            return this.left.frequency || this.right.frequency;
         },
         group: new Pizzicato.Group([left, right])
     }
@@ -67,4 +69,10 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
     this.setBalance = (value = 0.0) => this.stereoEffect.pan = value;
     this.stereoEffect = new Pizzicato.Effects.StereoPanner({pan: balance});
     this.sound.group.addEffect(this.stereoEffect);
+
+    ++Buzzer.instanceNum;
+    console.debug('Created buzzer #' + Buzzer.instanceNum);
 }
+
+Buzzer.instanceNum = 0;
+

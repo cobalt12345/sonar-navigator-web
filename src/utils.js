@@ -21,3 +21,24 @@ export function gpsToXYZ({lat, lng}) {
 
     return coords;
 }
+
+export function LogDecorator(Func) {
+    let propDescriptors = new Map(Object.entries(Object.getOwnPropertyDescriptors(Func)));
+    for (let prop in Func) {
+        const propDescriptor = propDescriptors.get(prop);
+        propDescriptor.enumerable = true;
+        if (typeof propDescriptor.value === 'function') {
+            propDescriptor.value = MethodWrapper(propDescriptor.value, prop);
+        }
+        Object.defineProperty(this, prop, propDescriptor);
+    }
+}
+
+function MethodWrapper(method, methodName) {
+    return function(args) {
+        const methodCallResult = method(args);
+        console.debug('Called: ' + methodName + '(' + Object.entries(args) + '): ' + methodCallResult);
+
+        return methodCallResult;
+    }
+}
