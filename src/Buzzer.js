@@ -25,7 +25,16 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
                        balance = BuzzerConstants.Balance.NORM_BALANCE,
                        volumeFrequency = BuzzerConstants.Balance.MIN_FREQUENCY) {
 
-    let left = new Pizzicato.Sound({
+    if (Buzzer.instanceNum) {
+        ++Buzzer.instanceNum;
+    } else {
+        Buzzer.instanceNum = 1;
+    }
+    console.debug('Buzzer instance #' + Buzzer.instanceNum);
+
+    if (!Buzzer.instance) {
+        console.debug('New Buzzer instance')
+        let left = new Pizzicato.Sound({
             source: 'wave',
             options: {
                 detached: false,
@@ -34,9 +43,9 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
                 frequency: volumeFrequency
             }
         });
-    left.addEffect(new Pizzicato.Effects.StereoPanner({pan: BuzzerConstants.Balance.ONLY_LEFT}));
+        left.addEffect(new Pizzicato.Effects.StereoPanner({pan: BuzzerConstants.Balance.ONLY_LEFT}));
 
-    let right = new Pizzicato.Sound({
+        let right = new Pizzicato.Sound({
             source: 'wave',
             options: {
                 detached: false,
@@ -45,34 +54,39 @@ export function Buzzer({volumeLeft = 0.01, volumeRight = 0.01},
                 frequency: volumeFrequency
             }
         });
-    right.addEffect(new Pizzicato.Effects.StereoPanner({pan: BuzzerConstants.Balance.ONLY_RIGHT}));
+        right.addEffect(new Pizzicato.Effects.StereoPanner({pan: BuzzerConstants.Balance.ONLY_RIGHT}));
 
-    this.sound = {
-        left,
-        right,
-        set frequency(value) {
-            this.left.frequency = this.right.frequency = value;
-        },
-        get frequency() {
-            return this.left.frequency || this.right.frequency;
-        },
-        group: new Pizzicato.Group([left, right])
-    }
-    this.play = () => this.sound.group.play();
-    this.pause = () => this.sound.group.pause();
-    this.stop = () => this.sound.group.stop();
-    this.volume = ({volumeLeft = 0.1, volumeRight = 0.1}) => {
-        this.sound.left.volume = volumeLeft;
-        this.sound.right.volume = volumeRight;
-    }
-    this.frequency = (value = 100) => this.sound.frequency = value;
-    this.setBalance = (value = 0.0) => this.stereoEffect.pan = value;
-    this.stereoEffect = new Pizzicato.Effects.StereoPanner({pan: balance});
-    this.sound.group.addEffect(this.stereoEffect);
+        this.sound = {
+            left,
+            right,
+            set frequency(value) {
+                this.left.frequency = this.right.frequency = value;
+            },
+            get frequency() {
+                return this.left.frequency || this.right.frequency;
+            },
+            group: new Pizzicato.Group([left, right])
+        }
+        this.stereoEffect = new Pizzicato.Effects.StereoPanner({pan: balance});
+        this.sound.group.addEffect(this.stereoEffect);
+        this.play = () => this.sound.group.play();
+        this.pause = () => this.sound.group.pause();
+        this.stop = () => this.sound.group.stop();
+        this.volume = ({volumeLeft = 0.1, volumeRight = 0.1}) => {
+            this.sound.left.volume = volumeLeft;
+            this.sound.right.volume = volumeRight;
+        }
+        this.frequency = (value = 100) => this.sound.frequency = value;
+        this.setBalance = (value = 0.0) => {
+            this.stereoEffect.pan = value;
+        }
 
-    ++Buzzer.instanceNum;
-    console.debug('Created buzzer #' + Buzzer.instanceNum);
+        Buzzer.instance = this;
+    } else {
+        console.debug('Use singleton Buzzer')
+    }
+
+    return Buzzer.instance;
 }
 
-Buzzer.instanceNum = 0;
 

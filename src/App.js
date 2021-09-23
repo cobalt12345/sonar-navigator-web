@@ -53,16 +53,14 @@ function App() {
     const [coordinatesValid, setCoordinatesValid] = React.useState(true);
     const [explorationInProgress, setExplorationInProgress] = React.useState(false);
     const classes = useStyles();
-    const [buzzerState] = React.useState(buzzer);
+    const [volume, setVolume] = React.useState(
+        {
+            volumeLeft: buzzer.sound.left.volume,
+            volumeRight: buzzer.sound.right.volume
+        });
 
-    // const [volume, setVolume] = React.useState(
-    //     {
-    //         volumeLeft: buzzerState.sound.left.volume,
-    //         volumeRight: buzzerState.sound.right.volume
-    //     });
-
-    const [frequency, setFrequency] = React.useState(buzzerState.sound.frequency);
-    const [balance, setBalance] = React.useState(buzzerState.stereoEffect.pan);
+    const [frequency, setFrequency] = React.useState(buzzer.sound.frequency);
+    const [balance, setBalance] = React.useState(buzzer.stereoEffect.pan);
     const [inlineConsoleVisible, setInlineConsoleVisible] = React.useState(false);
     const [deviceOrientationSupported, setDeviceOrientationSupported] = React.useState(null);
     const [deviceOrientation, setDeviceOrientation] = React.useState(null);
@@ -158,11 +156,11 @@ function App() {
             const newNormalBalance = turnAngle / 180;
             const newBalance = Math.floor(newNormalBalance / BALANCE_STEP) * BALANCE_STEP;
             setBalance(newBalance);
-            buzzerState.setBalance(newBalance);
+            buzzer.setBalance(newBalance);
             if (distance) {
                 let frequency = MAX_FREQUENCY / distance + ref.current.userSoundSettings.initFrequency;
                 setFrequency(frequency);
-                buzzerState.frequency(frequency);
+                buzzer.frequency(frequency);
             }
         }
     }, [requiredDirection, deviceOrientation, distance, /*buzzerState,*/ explorationInProgress]);
@@ -175,11 +173,11 @@ function App() {
         if (validCoords) {
             const userInitFrequency = ref.current.userSoundSettings.initFrequency;
             setFrequency(userInitFrequency);
-            buzzerState.frequency(userInitFrequency);
+            buzzer.frequency(userInitFrequency);
             if (explorationInProgress) {
-                buzzerState.stop();
+                buzzer.stop();
             } else {
-                buzzerState.play();
+                buzzer.play();
             }
             setExplorationInProgress(!explorationInProgress);
         }
@@ -210,16 +208,13 @@ function App() {
      * @param newValue
      */
     const handleVolumeChange = (event, newValue, target) => {
-        let previousState = {
-            volumeLeft: buzzerState.sound.left.volume,
-            volumeRight: buzzerState.sound.right.volume
-        };
         let modifiedStateValues = {[target]: newValue};
-        let mergedState = {...previousState, ...modifiedStateValues};
-        console.debug('Previous volume settings: ' + Object.entries(previousState));
+        let mergedState = {...volume, ...modifiedStateValues};
+        console.debug('Previous volume settings: ' + Object.entries(volume));
         console.debug('Modified volume settings: ' + Object.entries(modifiedStateValues));
         console.debug('Merged volume settings: ' + Object.entries(mergedState));
-        buzzerState.volume(mergedState);
+        setVolume(mergedState);
+        buzzer.volume(mergedState);
     }
 
     /**
@@ -229,9 +224,9 @@ function App() {
      * @param newValue
      */
     const handleFrequencyChange = (event, newValue) => {
-        buzzerState.play();
+        buzzer.play();
         setFrequency(newValue);
-        buzzerState.frequency(newValue);
+        buzzer.frequency(newValue);
     }
 
     /**
@@ -242,9 +237,9 @@ function App() {
      * @param newValue
      */
     const handleBalanceChange = (event, newValue) => {
-        buzzerState.play();
+        buzzer.play();
         setBalance(newValue);
-        buzzerState.setBalance(newValue);
+        buzzer.setBalance(newValue);
     }
 
 
@@ -328,7 +323,7 @@ function App() {
                                             marks
                                             valueLabelFormat={value => Math.trunc(value * 100) + '%'}
                                             valueLabelDisplay='auto'
-                                            value={buzzerState.sound.left.volume}
+                                            value={buzzer.sound.left.volume}
                                             onChange={(e, v)=>handleVolumeChange(e,v,
                                                 'volumeLeft')}
                                             aria-labelledby="volume-left" />
@@ -351,7 +346,7 @@ function App() {
                                             marks
                                             valueLabelFormat={value => (Math.trunc(value * 100) + '%')}
                                             valueLabelDisplay='auto'
-                                            value={buzzerState.sound.right.volume}
+                                            value={buzzer.sound.right.volume}
                                             onChange={(e,v)=>handleVolumeChange(e,v,
                                                 'volumeRight')}
                                             aria-labelledby="volume-right" />
@@ -374,7 +369,7 @@ function App() {
                                             disabled={explorationInProgress}
                                             onChange={handleFrequencyChange}
                                             onChangeCommitted={() => {
-                                                buzzerState.pause();
+                                                buzzer.pause();
                                                 ref.current.userSoundSettings.initFrequency = frequency;
                                             }} aria-labelledby="continuous-slider" />
                                 </Grid>
@@ -395,9 +390,9 @@ function App() {
                                     <Slider min={MIN_BALANCE} max={MAX_BALANCE} step={BALANCE_STEP} value={balance}
                                             /*onChange={handleBalanceChange}*/ aria-labelledby="continuous-slider"
                                             /*onChangeCommitted={() => {
-                                                buzzerState.pause();
+                                                buzzer.pause();
                                                 ref.current.userSoundSettings.initBalance = balance;}}*/
-                                            disabled={true} />
+                                            disabled={false} />
                                 </Grid>
                                 <Grid item>
                                     <ArrowRight />
